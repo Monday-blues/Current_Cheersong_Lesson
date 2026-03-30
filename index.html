@@ -376,30 +376,11 @@ textarea.form-input { resize: vertical; min-height: 60px; }
       <h4>GitHub Personal Access Token</h4>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">
         GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token<br>
-        <strong>gist</strong> 권한을 선택하세요. 모든 멤버가 같은 토큰을 사용하면 하나의 캘린더를 공유합니다.
+        <strong>gist</strong> 권한을 선택하세요. 이 앱은 고정된 description의 비공개 gist를 찾아 공유하므로,
+        각 유저 토큰이 해당 gist에 접근 권한이 있어야 합니다.
       </p>
       <div class="token-input-wrap">
         <input class="form-input" id="ghToken" type="password" placeholder="ghp_xxxxxxxxxxxx">
-      </div>
-    </div>
-    <div class="settings-section">
-      <h4>Gist ID</h4>
-      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">
-        처음 사용 시 비워두면 자동 생성됩니다.<br>
-        이미 만들어진 캘린더에 접속하려면 기존 Gist ID를 입력하세요.
-      </p>
-      <div class="token-input-wrap">
-        <input class="form-input" id="ghGistId" placeholder="기존 Gist ID (처음이면 비워두세요)">
-      </div>
-    </div>
-    <div class="settings-section" id="currentGistSection" style="display:none;">
-      <h4>📌 현재 Gist ID</h4>
-      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">
-        아래 Gist ID와 토큰을 다른 기기에서도 동일하게 입력하면 같은 캘린더를 사용합니다.
-      </p>
-      <div class="token-input-wrap">
-        <input class="form-input" id="currentGistId" readonly>
-        <button class="btn btn-secondary" onclick="copyGistId()">복사</button>
       </div>
     </div>
     <div class="form-actions">
@@ -418,7 +399,8 @@ const DOTS = ['var(--accent)','var(--green)','var(--pink)','var(--orange)','var(
 
 let state = {
   token: localStorage.getItem('gh_token') || '',
-  gistId: localStorage.getItem('gh_gist_id') || '',
+  gistId: '',
+  gistEtag: null,
   members: [], events: [], recurring: [],
   currentYear: new Date().getFullYear(),
   currentMonth: new Date().getMonth(),
@@ -472,42 +454,167 @@ function renderCellEvents(ds) {
 
 // ── GitHub Gist API ──
 const GIST_FILENAME = 'lesson-calendar-data.json';
+// 모든 유저가 같은 gist를 찾도록, description과 파일명을 기준으로 원격 gistId를 결정합니다.
+const FIXED_GIST_DESCRIPTION = 'lesson_calendar: 응원곡 레슨 캘린더 (shared single gist)';
 
 async function gistRequest(method, path, body) {
+  let { extraHeaders, returnEtag } = arguments[3] || {};
+  extraHeaders = extraHeaders || {};
+  returnEtag = !!returnEtag;
+
   const res = await fetch(`https://api.github.com${path}`, {
-    method, headers: { 'Authorization': `token ${state.token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+    method,
+    headers: {
+      'Authorization': `token ${state.token}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      ...extraHeaders,
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
-  return res.json();
+
+  if (!res.ok) {
+    const err = new Error(`GitHub API ${res.status}: ${res.statusText}`);
+    err.status = res.status;
+    throw err;
+  }
+
+  const json = await res.json();
+  if (!returnEtag) return json;
+  return { json, etag: res.headers.get('ETag') };
 }
 
 function gistPayload() { return { members: state.members, events: state.events, recurring: state.recurring }; }
 
+async function resolveGistId() {
+  if (state.gistId) return state.gistId;
+
+  // 토큰이 유효한 경우에만 접근 가능합니다.
+  // description이 FIXED_GIST_DESCRIPTION이고, 파일명이 lesson-calendar-data.json 인 gist를 찾습니다.
+  let best = null;
+  let bestTime = 0;
+  for (let page = 1; page <= 5; page++) {
+    const list = await gistRequest('GET', `/gists?per_page=100&page=${page}`);
+    const matches = (list || []).filter(g => {
+      if (!g || g.description !== FIXED_GIST_DESCRIPTION) return false;
+      return !!(g.files && g.files[GIST_FILENAME]);
+    });
+    matches.forEach(g => {
+      const t = g.updated_at ? Date.parse(g.updated_at) : 0;
+      if (!Number.isNaN(t) && t >= bestTime) {
+        bestTime = t;
+        best = g;
+      }
+    });
+  }
+  state.gistId = best?.id || '';
+  return state.gistId;
+}
+
 async function createGist() {
   const data = await gistRequest('POST', '/gists', {
-    description: '응원곡 레슨 캘린더 데이터', public: false,
+    description: FIXED_GIST_DESCRIPTION, public: false,
     files: { [GIST_FILENAME]: { content: JSON.stringify(gistPayload(), null, 2) } }
   });
-  state.gistId = data.id; localStorage.setItem('gh_gist_id', data.id);
+  state.gistId = data.id;
+  // 이후 PATCH 충돌 감지를 위해 현재 ETag도 확보합니다.
+  try { await loadGist(); } catch (e) {}
 }
 
 async function updateGist() {
   if (!state.gistId || !state.token) return;
-  await gistRequest('PATCH', `/gists/${state.gistId}`, { files: { [GIST_FILENAME]: { content: JSON.stringify(gistPayload(), null, 2) } } });
+  // ETag 기준으로 conditional update를 걸어, 다른 사용자의 동시 수정이 있으면 충돌 처리하도록 합니다.
+  const payload = { files: { [GIST_FILENAME]: { content: JSON.stringify(gistPayload(), null, 2) } } };
+  const { etag } = await gistRequest(
+    'PATCH',
+    `/gists/${state.gistId}`,
+    payload,
+    { extraHeaders: state.gistEtag ? { 'If-Match': state.gistEtag } : {}, returnEtag: true }
+  );
+  if (etag) state.gistEtag = etag;
 }
 
 async function loadGist() {
   if (!state.gistId || !state.token) return null;
-  const data = await gistRequest('GET', `/gists/${state.gistId}`);
+  const { json: data, etag } = await gistRequest(
+    'GET',
+    `/gists/${state.gistId}`,
+    undefined,
+    { returnEtag: true }
+  );
+  state.gistEtag = etag || null;
   const file = data.files[GIST_FILENAME];
   return file ? JSON.parse(file.content) : null;
+}
+
+// remote 데이터를 가져오되, 로컬 변경은 되도록 보존(병합)합니다.
+// - members: remote의 순서를 기본으로 두고, local에만 있는 멤버를 뒤에 추가
+// - events/recurring: id 기준으로 remote를 기본으로 채우고, local이 같은 id를 가지면 local 버전 우선
+// - remote에서 멤버가 삭제된 경우: local 이벤트도 해당 멤버는 제외(인덱스 매핑 불가)
+function mergeRemoteIntoLocal(remote) {
+  const remoteMembers = remote.members || [];
+  const remoteEvents = remote.events || [];
+  const remoteRecurring = remote.recurring || [];
+
+  const localMembers = state.members || [];
+  const localEvents = state.events || [];
+  const localRecurring = state.recurring || [];
+
+  const remoteNameSet = new Set(remoteMembers.map(m => m?.name).filter(Boolean));
+  const mergedMembers = [...remoteMembers];
+  localMembers.forEach(m => {
+    if (!m?.name) return;
+    if (!remoteNameSet.has(m.name)) mergedMembers.push(m);
+  });
+
+  const nameToIdx = {};
+  mergedMembers.forEach((m, i) => { if (m?.name) nameToIdx[m.name] = i; });
+
+  const remapMemberIdx = (memberIdx, fromMembers) => {
+    const name = fromMembers?.[memberIdx]?.name;
+    if (!name) return null;
+    return (name in nameToIdx) ? nameToIdx[name] : null;
+  };
+
+  // events merge
+  const mergedEventMap = new Map();
+  remoteEvents.forEach(ev => { if (ev?.id) mergedEventMap.set(ev.id, ev); });
+  localEvents.forEach(ev => {
+    if (!ev?.id) return;
+    const newIdx = remapMemberIdx(ev.memberIdx, localMembers);
+    if (newIdx === null) return; // remote에서 멤버가 사라짐
+    mergedEventMap.set(ev.id, { ...ev, memberIdx: newIdx });
+  });
+  const mergedEvents = Array.from(mergedEventMap.values());
+
+  // recurring merge
+  const mergedRecurringMap = new Map();
+  remoteRecurring.forEach(rc => { if (rc?.id) mergedRecurringMap.set(rc.id, rc); });
+  localRecurring.forEach(rc => {
+    if (!rc?.id) return;
+    const newIdx = remapMemberIdx(rc.memberIdx, localMembers);
+    if (newIdx === null) return;
+    mergedRecurringMap.set(rc.id, { ...rc, memberIdx: newIdx });
+  });
+  const mergedRecurring = Array.from(mergedRecurringMap.values());
+
+  // 현재 멤버 필터가 깨질 경우 해제
+  if (state.filterMember !== null) {
+    const currentName = localMembers?.[state.filterMember]?.name;
+    if (!currentName || !(currentName in nameToIdx)) state.filterMember = null;
+    else state.filterMember = nameToIdx[currentName];
+  }
+
+  state.members = mergedMembers;
+  state.events = mergedEvents;
+  state.recurring = mergedRecurring;
 }
 
 async function syncData() {
   if (!state.token) { showToast('GitHub 토큰을 먼저 설정하세요', 'error'); return; }
   setSyncUI('syncing');
   try {
+    await resolveGistId();
     if (!state.gistId) { await createGist(); showToast('새 캘린더 생성 완료!', 'success'); }
     else {
       const remote = await loadGist();
@@ -522,7 +629,31 @@ async function syncData() {
 async function pushToRemote() {
   if (!state.token || !state.gistId) return;
   setSyncUI('syncing');
-  try { await updateGist(); setSyncUI('done'); } catch (e) { console.error(e); setSyncUI('error'); }
+  try {
+    await updateGist();
+    setSyncUI('done');
+  } catch (e) {
+    // 412: ETag 충돌(다른 사용자가 먼저 수정/저장한 경우)
+    if (e && e.status === 412) {
+      try {
+        const remote = await loadGist(); // loadGist에서 state.gistEtag도 갱신됩니다.
+        if (remote) {
+          mergeRemoteIntoLocal(remote);
+          saveLocal();
+          render();
+          if (state.selectedDate) showDayDetail(state.selectedDate);
+        }
+        await updateGist();
+        setSyncUI('done');
+        showToast('동기화 충돌 감지: 병합 후 저장 완료', 'success');
+        return;
+      } catch (e2) {
+        console.error(e2);
+      }
+    }
+    console.error(e);
+    setSyncUI('error');
+  }
 }
 
 async function pullFromRemote() {
@@ -531,13 +662,14 @@ async function pullFromRemote() {
   try {
     const remote = await loadGist();
     if (remote) {
-      const changed = JSON.stringify({m:state.members,e:state.events,r:state.recurring})
-        !== JSON.stringify({m:remote.members||[],e:remote.events||[],r:remote.recurring||[]});
-      if (changed) {
-        state.members=remote.members||[]; state.events=remote.events||[]; state.recurring=remote.recurring||[];
-        saveLocal(); render();
+      const before = JSON.stringify({ m: state.members, e: state.events, r: state.recurring });
+      mergeRemoteIntoLocal(remote);
+      const after = JSON.stringify({ m: state.members, e: state.events, r: state.recurring });
+      if (before !== after) {
+        saveLocal();
+        render();
         if (state.selectedDate) showDayDetail(state.selectedDate);
-        showToast('새 변경사항 동기화됨', 'success');
+        showToast('새 변경사항 동기화됨(병합)', 'success');
       }
     }
     setSyncUI('done');
@@ -571,12 +703,9 @@ function loadLocal() {
 
 async function connectGithub() {
   const token = document.getElementById('ghToken').value.trim();
-  const gistId = document.getElementById('ghGistId').value.trim();
   if (!token) { showToast('토큰을 입력하세요', 'error'); return; }
   state.token = token; localStorage.setItem('gh_token', token);
-  if (gistId) { state.gistId = gistId; localStorage.setItem('gh_gist_id', gistId); }
   await syncData(); startAutoSync();
-  if (state.gistId) { document.getElementById('currentGistSection').style.display='block'; document.getElementById('currentGistId').value=state.gistId; }
   closeModal('settingsModal');
   showToast('연결 완료! 자동 동기화 활성화', 'success');
 }
@@ -585,7 +714,12 @@ function copyGistId() { navigator.clipboard.writeText(state.gistId); showToast('
 
 function updateStatus(c) {
   const dot=document.getElementById('statusDot'), text=document.getElementById('statusText');
-  if (c) { dot.classList.add('connected'); text.textContent=`GitHub 연결됨 — Gist: ${state.gistId.slice(0,8)}...`; }
+  if (c) {
+    dot.classList.add('connected');
+    text.textContent = state.gistId
+      ? `GitHub 연결됨 — Gist: ${state.gistId.slice(0,8)}...`
+      : 'GitHub 연결됨 — 캘린더 Gist를 찾는 중...';
+  }
   else { dot.classList.remove('connected'); text.textContent=state.token?'연결 오류':'GitHub 연결 안됨 — 설정에서 토큰을 입력하세요'; }
 }
 
@@ -599,8 +733,6 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 
 function openSettings() {
   document.getElementById('ghToken').value=state.token;
-  document.getElementById('ghGistId').value=state.gistId;
-  if (state.gistId) { document.getElementById('currentGistSection').style.display='block'; document.getElementById('currentGistId').value=state.gistId; }
   openModal('settingsModal');
 }
 function openAddMember() { openModal('memberModal'); document.getElementById('memName').value=''; }
@@ -860,14 +992,16 @@ function showDayDetail(ds) {
 function render() { renderCalendar(); renderMembers(); renderRecurringList(); }
 
 async function manualRefresh() {
-  if (!state.token||!state.gistId) { showToast('GitHub 연결이 필요합니다','error'); return; }
-  await pullFromRemote();
+  if (!state.token) { showToast('GitHub 연결이 필요합니다','error'); return; }
+  // syncData() 내부에서 "고정 description의 gist"를 찾아 로드하므로,
+  // manual refresh는 pullFromRemote() 대신 syncData()로 처리합니다.
+  await syncData();
   showToast('최신 데이터로 갱신 완료!', 'success');
 }
 
 // ── Init ──
 loadLocal();
-if (state.token && state.gistId) { updateStatus(true); syncData().then(()=>startAutoSync()); }
+if (state.token) { updateStatus(true); syncData().then(()=>startAutoSync()); }
 render();
 
 ['rcStart','rcEnd','rcTime'].forEach(id=>document.getElementById(id).addEventListener('change', updateRecurringPreview));
