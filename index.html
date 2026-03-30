@@ -627,9 +627,12 @@ async function syncData() {
 }
 
 async function pushToRemote() {
-  if (!state.token || !state.gistId) return;
+  if (!state.token) return;
   setSyncUI('syncing');
   try {
+    await resolveGistId();
+    if (!state.gistId) await createGist();
+
     await updateGist();
     setSyncUI('done');
   } catch (e) {
@@ -653,6 +656,7 @@ async function pushToRemote() {
     }
     console.error(e);
     setSyncUI('error');
+    showToast(`저장 실패: ${e && e.status ? e.status : ''} ${e && e.message ? e.message : '오류'}`, 'error');
   }
 }
 
