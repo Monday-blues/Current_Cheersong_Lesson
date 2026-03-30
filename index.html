@@ -536,15 +536,25 @@ async function updateGist() {
 
 async function loadGist() {
   if (!state.gistId || !state.token) return null;
-  const { json: data, etag } = await gistRequest(
-    'GET',
-    `/gists/${state.gistId}`,
-    undefined,
-    { returnEtag: true }
-  );
-  state.gistEtag = etag || null;
-  const file = data.files[GIST_FILENAME];
-  return file ? JSON.parse(file.content) : null;
+  try {
+    const { json: data, etag } = await gistRequest(
+      'GET',
+      `/gists/${state.gistId}`,
+      undefined,
+      { returnEtag: true }
+    );
+    state.gistEtag = etag || null;
+    const file = data.files[GIST_FILENAME];
+    return file ? JSON.parse(file.content) : null;
+  } catch (e) {
+    // 접근 권한/삭제 등으로 gist를 못 찾으면, 다음 sync에서 재탐색/생성하도록 유도
+    if (e && e.status === 404) {
+      state.gistId = '';
+      state.gistEtag = null;
+      return null;
+    }
+    throw e;
+  }
 }
 
 // remote 데이터를 가져오되, 로컬 변경은 되도록 보존(병합)합니다.
@@ -624,7 +634,12 @@ async function syncData() {
     updateStatus(true); saveLocal(); render();
     if (state.selectedDate) showDayDetail(state.selectedDate);
     setSyncUI('done');
-  } catch (e) { console.error(e); setSyncUI('error'); updateStatus(false); }
+  } catch (e) {
+    console.error(e);
+    setSyncUI('error');
+    updateStatus(false);
+    showToast(`동기화 실패: ${e && e.status ? e.status : ''} ${e && e.message ? e.message : '오류'}`, 'error');
+  }
 }
 
 async function pushToRemote() {
@@ -637,6 +652,21 @@ async function pushToRemote() {
     await updateGist();
     setSyncUI('done');
   } catch (e) {
+    // gist가 없거나(삭제) 권한 때문에 보이지 않는 경우
+    if (e && e.status === 404) {
+      try {
+        state.gistId = '';
+        state.gistEtag = null;
+        await resolveGistId();
+        if (!state.gistId) await createGist();
+        await updateGist();
+        setSyncUI('done');
+        showToast('Gist 재탐색/생성 후 저장 완료', 'success');
+        return;
+      } catch (e2) {
+        console.error(e2);
+      }
+    }
     // 412: ETag 충돌(다른 사용자가 먼저 수정/저장한 경우)
     if (e && e.status === 412) {
       try {
