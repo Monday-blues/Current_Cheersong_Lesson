@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>응원곡 레슨 캘린더</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0c0c14;
+  --surface: #13131f;
+  --surface2: #1a1a2e;
+  --surface3: #22223a;
+  --border: #2a2a45;
+  --text: #e8e8f0;
+  --text-dim: #8888aa;
+  --accent: #6c5ce7;
+  --accent-glow: #7c6cf7;
+  --accent-soft: rgba(108, 92, 231, 0.15);
+  --green: #00cec9;
+  --green-soft: rgba(0, 206, 201, 0.15);
+  --pink: #fd79a8;
+  --pink-soft: rgba(253, 121, 168, 0.15);
+  --orange: #fdcb6e;
+  --orange-soft: rgba(253, 203, 110, 0.15);
+  --blue: #74b9ff;
+  --blue-soft: rgba(116, 185, 255, 0.15);
+  --red: #ff7675;
+  --red-soft: rgba(255, 118, 117, 0.15);
+  --cyan: #81ecec;
+  --cyan-soft: rgba(129, 236, 236, 0.12);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'Noto Sans KR', 'Outfit', sans-serif;
+  min-height: 100vh; overflow-x: hidden;
+}
+body::before {
+  content: ''; position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
+  background: radial-gradient(ellipse at 30% 20%, rgba(108,92,231,0.06) 0%, transparent 50%),
+              radial-gradient(ellipse at 70% 80%, rgba(0,206,201,0.04) 0%, transparent 50%);
+  animation: bgDrift 20s ease-in-out infinite alternate; z-index: 0; pointer-events: none;
+}
+@keyframes bgDrift { 0%{transform:translate(0,0) rotate(0deg)} 100%{transform:translate(-3%,-3%) rotate(2deg)} }
+
+.app { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 24px 0; margin-bottom: 20px; border-bottom: 1px solid var(--border);
+}
+.header h1 {
+  font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 28px;
+  background: linear-gradient(135deg, var(--accent-glow), var(--green));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px;
+}
+.header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.btn {
+  padding: 8px 16px; border: none; border-radius: 8px;
+  font-family: 'Noto Sans KR', sans-serif; font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 12px rgba(108,92,231,0.3); }
+.btn-primary:hover { background: var(--accent-glow); transform: translateY(-1px); }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--surface3); }
+.btn-green { background: var(--green); color: #0c0c14; font-weight: 600; box-shadow: 0 2px 12px rgba(0,206,201,0.3); }
+.btn-green:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.btn-danger { background: var(--red-soft); color: var(--red); }
+.btn-danger:hover { background: rgba(255,118,117,0.25); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-icon { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; border-radius: 8px; }
+
+.status-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; margin-bottom: 20px;
+  background: var(--surface); border-radius: 12px; border: 1px solid var(--border); font-size: 13px;
+}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex-shrink: 0; }
+.status-dot.connected { background: var(--green); box-shadow: 0 0 8px rgba(0,206,201,0.5); }
+.status-text { color: var(--text-dim); flex: 1; }
+.sync-indicator { font-size: 11px; color: var(--text-dim); flex-shrink: 0; display: flex; align-items: center; gap: 4px; }
+.sync-indicator .spin { display: inline-block; animation: spinAnim 1s linear infinite; }
+@keyframes spinAnim { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+
+.cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.cal-nav h2 { font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 22px; }
+.nav-arrows { display: flex; gap: 6px; }
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 24px; }
+.cal-day-header {
+  padding: 10px 4px; text-align: center; font-size: 12px; font-weight: 600;
+  color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px;
+}
+.cal-day-header:first-child { color: var(--red); }
+.cal-day-header:last-child { color: var(--blue); }
+
+.cal-cell {
+  min-height: 100px; padding: 6px; background: var(--surface); border-radius: 8px;
+  border: 1px solid transparent; cursor: pointer; transition: all 0.15s; position: relative; overflow: hidden;
+}
+.cal-cell:hover { border-color: var(--border); background: var(--surface2); }
+.cal-cell.today { border-color: var(--accent); background: var(--accent-soft); }
+.cal-cell.other-month { opacity: 0.45; }
+.cal-cell.selected { border-color: var(--accent-glow); box-shadow: 0 0 16px rgba(108,92,231,0.2); opacity: 1; }
+
+.cal-date {
+  font-size: 13px; font-weight: 600; margin-bottom: 4px;
+  display: inline-block; width: 24px; height: 24px; line-height: 24px; text-align: center; border-radius: 6px;
+}
+.cal-cell.today .cal-date { background: var(--accent); color: #fff; }
+.cal-cell:nth-child(7n+1) .cal-date { color: var(--red); }
+.cal-cell:nth-child(7n) .cal-date { color: var(--blue); }
+
+.cal-event {
+  font-size: 10px; padding: 2px 5px; margin-bottom: 2px; border-radius: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; font-weight: 500;
+}
+.cal-event:hover { filter: brightness(1.2); }
+.cal-event.is-recurring { border-left-style: dashed !important; }
+.cal-more { font-size: 10px; color: var(--text-dim); padding: 1px 5px; cursor: pointer; }
+.cal-more:hover { color: var(--text); }
+
+.member-0 { background: var(--accent-soft); color: var(--accent); border-left: 2px solid var(--accent); }
+.member-1 { background: var(--green-soft); color: var(--green); border-left: 2px solid var(--green); }
+.member-2 { background: var(--pink-soft); color: var(--pink); border-left: 2px solid var(--pink); }
+.member-3 { background: var(--orange-soft); color: var(--orange); border-left: 2px solid var(--orange); }
+.member-4 { background: var(--blue-soft); color: var(--blue); border-left: 2px solid var(--blue); }
+.member-5 { background: var(--red-soft); color: var(--red); border-left: 2px solid var(--red); }
+
+.layout { display: flex; gap: 20px; }
+.cal-main { flex: 1; min-width: 0; }
+.side-panel {
+  width: 340px; flex-shrink: 0; background: var(--surface); border-radius: 14px;
+  border: 1px solid var(--border); padding: 20px;
+  max-height: calc(100vh - 120px); overflow-y: auto; position: sticky; top: 20px;
+}
+.side-panel h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+.member-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.member-chip {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  cursor: pointer; transition: all 0.15s; font-size: 13px;
+}
+.member-chip:hover { background: var(--surface3); }
+.member-chip.active { border-color: var(--accent); }
+.member-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.member-name { flex: 1; font-weight: 500; }
+.member-count { font-size: 11px; color: var(--text-dim); }
+
+.recurring-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.recurring-card {
+  padding: 10px 12px; border-radius: 8px; background: var(--surface2);
+  border: 1px solid var(--border); font-size: 12px; border-left: 3px dashed var(--cyan);
+}
+.recurring-card .rc-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.recurring-card .rc-title { font-weight: 600; font-size: 13px; }
+.recurring-card .rc-meta { color: var(--text-dim); }
+.recurring-card .rc-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+
+.add-btns { display: flex; gap: 6px; margin-top: 10px; }
+.add-btns .btn { flex: 1; justify-content: center; }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px); z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface); border-radius: 16px; border: 1px solid var(--border); padding: 28px;
+  width: 480px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+  transform: translateY(10px); transition: transform 0.2s; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.modal-overlay.open .modal { transform: translateY(0); }
+.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+
+.form-group { margin-bottom: 16px; }
+.form-group label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--text-dim); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.form-input {
+  width: 100%; padding: 10px 14px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-size: 14px;
+  font-family: 'Noto Sans KR', sans-serif; transition: border-color 0.15s;
+}
+.form-input:focus { outline: none; border-color: var(--accent); }
+.form-input::placeholder { color: var(--text-dim); }
+select.form-input { cursor: pointer; }
+textarea.form-input { resize: vertical; min-height: 60px; }
+.form-row { display: flex; gap: 10px; }
+.form-row .form-group { flex: 1; }
+.form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+.dow-selector { display: flex; gap: 6px; flex-wrap: wrap; }
+.dow-btn {
+  width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text-dim); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; display: grid; place-items: center;
+}
+.dow-btn:hover { background: var(--surface3); color: var(--text); }
+.dow-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 2px 8px rgba(108,92,231,0.4); }
+
+.preview-banner {
+  margin-top: 12px; padding: 12px 14px; border-radius: 10px;
+  background: var(--cyan-soft); border: 1px dashed var(--cyan); font-size: 12px; color: var(--cyan);
+}
+.preview-banner strong { font-weight: 700; }
+
+.day-events { display: flex; flex-direction: column; gap: 8px; }
+.day-event-card {
+  padding: 12px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface2); transition: all 0.15s;
+}
+.day-event-card:hover { background: var(--surface3); }
+.day-event-card.is-recurring { border-left: 3px dashed var(--cyan); }
+.event-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.event-meta { font-size: 12px; color: var(--text-dim); display: flex; flex-direction: column; gap: 2px; }
+.event-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+.settings-section { margin-bottom: 20px; }
+.settings-section h4 { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text-dim); }
+.token-input-wrap { display: flex; gap: 6px; }
+.token-input-wrap .form-input { flex: 1; font-size: 12px; }
+
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  padding: 12px 20px; border-radius: 10px; background: var(--surface2);
+  border: 1px solid var(--border); font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  animation: toastIn 0.3s ease;
+}
+.toast.success { border-color: var(--green); }
+.toast.error { border-color: var(--red); }
+@keyframes toastIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+.empty-state { text-align: center; padding: 32px 16px; color: var(--text-dim); }
+.empty-state .icon { font-size: 32px; margin-bottom: 8px; }
+.empty-state p { font-size: 13px; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+@media (max-width: 900px) {
+  .layout { flex-direction: column; }
+  .side-panel { width: 100%; position: static; max-height: none; }
+  .cal-cell { min-height: 70px; } .cal-event { font-size: 9px; } .header h1 { font-size: 20px; }
+}
+@media (max-width: 600px) {
+  .app { padding: 12px; }
+  .cal-cell { min-height: 55px; padding: 3px; }
+  .cal-date { font-size: 11px; width: 20px; height: 20px; line-height: 20px; }
+  .cal-event { font-size: 8px; padding: 1px 3px; }
+  .add-btns { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>🎵 응원곡 레슨 캘린더</h1>
+    <div class="header-actions">
+      <button class="btn btn-secondary" onclick="openSettings()">⚙️ 설정</button>
+      <button class="btn btn-primary" onclick="manualRefresh()">🔄 새로고침</button>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <span class="status-text" id="statusText">GitHub 연결 안됨 — 설정에서 토큰을 입력하세요</span>
+    <span class="sync-indicator" id="syncIndicator"></span>
+    <button class="btn btn-sm btn-secondary" onclick="openSettings()">연결</button>
+  </div>
+
+  <div class="layout">
+    <div class="cal-main">
+      <div class="cal-nav">
+        <div class="nav-arrows">
+          <button class="btn btn-icon btn-secondary" onclick="changeMonth(-1)">◀</button>
+          <button class="btn btn-sm btn-secondary" onclick="goToday()">오늘</button>
+          <button class="btn btn-icon btn-secondary" onclick="changeMonth(1)">▶</button>
+        </div>
+        <h2 id="calTitle"></h2>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+
+    <div class="side-panel">
+      <h3>👥 멤버</h3>
+      <div class="member-list" id="memberList"></div>
+      <button class="btn btn-secondary" style="width:100%;justify-content:center;" onclick="openAddMember()">+ 멤버 추가</button>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
+
+      <h3>🔁 반복 일정</h3>
+      <div id="recurringList"></div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:20px 0;">
+
+      <h3 id="dayDetailTitle">📅 일정</h3>
+      <div id="dayDetail">
+        <div class="empty-state">
+          <div class="icon">📋</div>
+          <p>날짜를 클릭하여 일정을 확인하세요</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Single Event Modal -->
+<div class="modal-overlay" id="eventModal">
+  <div class="modal">
+    <h3 id="eventModalTitle">레슨 일정 추가</h3>
+    <div class="form-group"><label>멤버</label><select class="form-input" id="evMember"></select></div>
+    <div class="form-group"><label>응원곡</label><input class="form-input" id="evSong" placeholder="예: 파이팅 해야지"></div>
+    <div class="form-row">
+      <div class="form-group"><label>날짜</label><input class="form-input" id="evDate" type="date"></div>
+      <div class="form-group"><label>시간</label><input class="form-input" id="evTime" type="time" value="14:00"></div>
+    </div>
+    <div class="form-group"><label>메모</label><textarea class="form-input" id="evNote" placeholder="레슨 내용, 장소 등"></textarea></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal('eventModal')">취소</button>
+      <button class="btn btn-danger" id="evDeleteBtn" style="display:none;" onclick="deleteEvent()">삭제</button>
+      <button class="btn btn-primary" onclick="saveEvent()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Recurring Event Modal -->
+<div class="modal-overlay" id="recurringModal">
+  <div class="modal">
+    <h3>🔁 매주 반복 일정 추가</h3>
+    <p style="font-size:12px;color:var(--text-dim);margin:-12px 0 20px;">매주 같은 요일, 같은 시간에 자동으로 일정을 생성합니다.</p>
+    <div class="form-group"><label>멤버</label><select class="form-input" id="rcMember"></select></div>
+    <div class="form-group"><label>응원곡</label><input class="form-input" id="rcSong" placeholder="예: 파이팅 해야지"></div>
+    <div class="form-group"><label>반복 요일 (클릭하여 선택)</label><div class="dow-selector" id="rcDays"></div></div>
+    <div class="form-group"><label>레슨 시간</label><input class="form-input" id="rcTime" type="time" value="14:00"></div>
+    <div class="form-row">
+      <div class="form-group"><label>시작일</label><input class="form-input" id="rcStart" type="date"></div>
+      <div class="form-group"><label>종료일</label><input class="form-input" id="rcEnd" type="date"></div>
+    </div>
+    <div class="form-group"><label>메모</label><textarea class="form-input" id="rcNote" placeholder="레슨 장소, 특이사항 등"></textarea></div>
+    <div class="preview-banner" id="rcPreview" style="display:none;">
+      <strong>📋 미리보기:</strong> <span id="rcPreviewText"></span>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal('recurringModal')">취소</button>
+      <button class="btn btn-green" onclick="saveRecurring()">🔁 반복 일정 생성</button>
+    </div>
+  </div>
+</div>
+
+<!-- Member Modal -->
+<div class="modal-overlay" id="memberModal">
+  <div class="modal">
+    <h3>멤버 추가</h3>
+    <div class="form-group"><label>이름</label><input class="form-input" id="memName" placeholder="멤버 이름"></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal('memberModal')">취소</button>
+      <button class="btn btn-primary" onclick="saveMember()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal — 단일 캘린더용 간소화 -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h3>⚙️ GitHub 연결 설정</h3>
+    <div class="settings-section">
+      <h4>GitHub Personal Access Token</h4>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">
+        GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token<br>
+        <strong>gist</strong> 권한을 선택하세요. 모든 멤버가 같은 토큰을 사용하면 하나의 캘린더를 공유합니다.
+      </p>
+      <div class="token-input-wrap">
+        <input class="form-input" id="ghToken" type="password" placeholder="ghp_xxxxxxxxxxxx">
+      </div>
+    </div>
+    <div class="settings-section">
+      <h4>Gist ID</h4>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">
+        처음 사용 시 비워두면 자동 생성됩니다.<br>
+        이미 만들어진 캘린더에 접속하려면 기존 Gist ID를 입력하세요.
+      </p>
+      <div class="token-input-wrap">
+        <input class="form-input" id="ghGistId" placeholder="기존 Gist ID (처음이면 비워두세요)">
+      </div>
+    </div>
+    <div class="settings-section" id="currentGistSection" style="display:none;">
+      <h4>📌 현재 Gist ID</h4>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">
+        아래 Gist ID와 토큰을 다른 기기에서도 동일하게 입력하면 같은 캘린더를 사용합니다.
+      </p>
+      <div class="token-input-wrap">
+        <input class="form-input" id="currentGistId" readonly>
+        <button class="btn btn-secondary" onclick="copyGistId()">복사</button>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal('settingsModal')">닫기</button>
+      <button class="btn btn-primary" onclick="connectGithub()">연결</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+const DAY_NAMES = ['일','월','화','수','목','금','토'];
+const COLORS = ['member-0','member-1','member-2','member-3','member-4','member-5'];
+const DOTS = ['var(--accent)','var(--green)','var(--pink)','var(--orange)','var(--blue)','var(--red)'];
+
+let state = {
+  token: localStorage.getItem('gh_token') || '',
+  gistId: localStorage.getItem('gh_gist_id') || '',
+  members: [], events: [], recurring: [],
+  currentYear: new Date().getFullYear(),
+  currentMonth: new Date().getMonth(),
+  selectedDate: null, editingEventId: null, filterMember: null,
+};
+
+function fmtDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+// ── Recurring ──
+function getRecurringEventsForDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00'), dow = d.getDay();
+  return state.recurring.filter(rc => {
+    if (!rc.days.includes(dow)) return false;
+    if (dateStr < rc.startDate || dateStr > rc.endDate) return false;
+    if (state.filterMember !== null && rc.memberIdx !== state.filterMember) return false;
+    return true;
+  }).map(rc => ({ id:'rc_'+rc.id+'_'+dateStr, memberIdx:rc.memberIdx, song:rc.song, date:dateStr, time:rc.time, note:rc.note||'', isRecurring:true, recurringId:rc.id }));
+}
+
+function getAllEventsForDate(dateStr) {
+  const single = state.events.filter(e => {
+    if (e.date !== dateStr) return false;
+    if (state.filterMember !== null && e.memberIdx !== state.filterMember) return false;
+    return true;
+  });
+  const recurring = getRecurringEventsForDate(dateStr);
+  const deduped = recurring.filter(rc => !single.some(s => s.recurringOverride === rc.recurringId && s.date === rc.date));
+  return [...single, ...deduped];
+}
+
+function countRecurringDates(s, e, days) {
+  let c = 0; const cur = new Date(s+'T00:00:00'), end = new Date(e+'T00:00:00');
+  while (cur <= end) { if (days.includes(cur.getDay())) c++; cur.setDate(cur.getDate()+1); }
+  return c;
+}
+
+// Helper: render event chips for any calendar cell
+function renderCellEvents(ds) {
+  const events = getAllEventsForDate(ds);
+  let h = '';
+  events.slice(0, 3).forEach(ev => {
+    const cls = COLORS[ev.memberIdx % COLORS.length];
+    const mn = state.members[ev.memberIdx]?.name || '?';
+    const rc = ev.isRecurring ? ' is-recurring' : '';
+    h += `<div class="cal-event ${cls}${rc}" onclick="event.stopPropagation();${ev.isRecurring?`selectDate('${ds}')`:`openEditEvent(state.events.find(e=>e.id==='${ev.id}'))`}" title="${mn}: ${ev.song}${ev.isRecurring?' (반복)':''}">${mn} ${ev.song}</div>`;
+  });
+  if (events.length > 3) h += `<div class="cal-more">+${events.length-3}개 더</div>`;
+  return h;
+}
+
+// ── GitHub Gist API ──
+const GIST_FILENAME = 'lesson-calendar-data.json';
+
+async function gistRequest(method, path, body) {
+  const res = await fetch(`https://api.github.com${path}`, {
+    method, headers: { 'Authorization': `token ${state.token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
+  return res.json();
+}
+
+function gistPayload() { return { members: state.members, events: state.events, recurring: state.recurring }; }
+
+async function createGist() {
+  const data = await gistRequest('POST', '/gists', {
+    description: '응원곡 레슨 캘린더 데이터', public: false,
+    files: { [GIST_FILENAME]: { content: JSON.stringify(gistPayload(), null, 2) } }
+  });
+  state.gistId = data.id; localStorage.setItem('gh_gist_id', data.id);
+}
+
+async function updateGist() {
+  if (!state.gistId || !state.token) return;
+  await gistRequest('PATCH', `/gists/${state.gistId}`, { files: { [GIST_FILENAME]: { content: JSON.stringify(gistPayload(), null, 2) } } });
+}
+
+async function loadGist() {
+  if (!state.gistId || !state.token) return null;
+  const data = await gistRequest('GET', `/gists/${state.gistId}`);
+  const file = data.files[GIST_FILENAME];
+  return file ? JSON.parse(file.content) : null;
+}
+
+async function syncData() {
+  if (!state.token) { showToast('GitHub 토큰을 먼저 설정하세요', 'error'); return; }
+  setSyncUI('syncing');
+  try {
+    if (!state.gistId) { await createGist(); showToast('새 캘린더 생성 완료!', 'success'); }
+    else {
+      const remote = await loadGist();
+      if (remote) { state.members = remote.members||[]; state.events = remote.events||[]; state.recurring = remote.recurring||[]; }
+    }
+    updateStatus(true); saveLocal(); render();
+    if (state.selectedDate) showDayDetail(state.selectedDate);
+    setSyncUI('done');
+  } catch (e) { console.error(e); setSyncUI('error'); updateStatus(false); }
+}
+
+async function pushToRemote() {
+  if (!state.token || !state.gistId) return;
+  setSyncUI('syncing');
+  try { await updateGist(); setSyncUI('done'); } catch (e) { console.error(e); setSyncUI('error'); }
+}
+
+async function pullFromRemote() {
+  if (!state.token || !state.gistId) return;
+  setSyncUI('syncing');
+  try {
+    const remote = await loadGist();
+    if (remote) {
+      const changed = JSON.stringify({m:state.members,e:state.events,r:state.recurring})
+        !== JSON.stringify({m:remote.members||[],e:remote.events||[],r:remote.recurring||[]});
+      if (changed) {
+        state.members=remote.members||[]; state.events=remote.events||[]; state.recurring=remote.recurring||[];
+        saveLocal(); render();
+        if (state.selectedDate) showDayDetail(state.selectedDate);
+        showToast('새 변경사항 동기화됨', 'success');
+      }
+    }
+    setSyncUI('done');
+  } catch (e) { console.error(e); setSyncUI('error'); }
+}
+
+async function saveAndSync() { saveLocal(); await pushToRemote(); }
+
+function setSyncUI(s) {
+  const el = document.getElementById('syncIndicator'), now = new Date();
+  const t = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  if (s==='syncing') el.innerHTML='<span class="spin">🔄</span> 동기화 중…';
+  else if (s==='done') el.innerHTML=`✅ ${t}`;
+  else if (s==='error') el.innerHTML=`⚠️ 오류 (${t})`;
+}
+
+let autoSyncInterval = null;
+function startAutoSync() { stopAutoSync(); if (!state.token||!state.gistId) return; autoSyncInterval=setInterval(()=>{ if(!document.hidden) pullFromRemote(); },30000); }
+function stopAutoSync() { if(autoSyncInterval){clearInterval(autoSyncInterval);autoSyncInterval=null;} }
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden&&state.token&&state.gistId) pullFromRemote(); });
+window.addEventListener('focus', ()=>{ if(state.token&&state.gistId) pullFromRemote(); });
+
+function saveLocal() {
+  localStorage.setItem('cal_members', JSON.stringify(state.members));
+  localStorage.setItem('cal_events', JSON.stringify(state.events));
+  localStorage.setItem('cal_recurring', JSON.stringify(state.recurring));
+}
+function loadLocal() {
+  try { state.members=JSON.parse(localStorage.getItem('cal_members')||'[]'); state.events=JSON.parse(localStorage.getItem('cal_events')||'[]'); state.recurring=JSON.parse(localStorage.getItem('cal_recurring')||'[]'); } catch(e){}
+}
+
+async function connectGithub() {
+  const token = document.getElementById('ghToken').value.trim();
+  const gistId = document.getElementById('ghGistId').value.trim();
+  if (!token) { showToast('토큰을 입력하세요', 'error'); return; }
+  state.token = token; localStorage.setItem('gh_token', token);
+  if (gistId) { state.gistId = gistId; localStorage.setItem('gh_gist_id', gistId); }
+  await syncData(); startAutoSync();
+  if (state.gistId) { document.getElementById('currentGistSection').style.display='block'; document.getElementById('currentGistId').value=state.gistId; }
+  closeModal('settingsModal');
+  showToast('연결 완료! 자동 동기화 활성화', 'success');
+}
+
+function copyGistId() { navigator.clipboard.writeText(state.gistId); showToast('Gist ID 복사됨!', 'success'); }
+
+function updateStatus(c) {
+  const dot=document.getElementById('statusDot'), text=document.getElementById('statusText');
+  if (c) { dot.classList.add('connected'); text.textContent=`GitHub 연결됨 — Gist: ${state.gistId.slice(0,8)}...`; }
+  else { dot.classList.remove('connected'); text.textContent=state.token?'연결 오류':'GitHub 연결 안됨 — 설정에서 토큰을 입력하세요'; }
+}
+
+function showToast(msg, type='') {
+  const t=document.createElement('div'); t.className=`toast ${type}`; t.textContent=msg;
+  document.getElementById('toastContainer').appendChild(t); setTimeout(()=>t.remove(),3000);
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function openSettings() {
+  document.getElementById('ghToken').value=state.token;
+  document.getElementById('ghGistId').value=state.gistId;
+  if (state.gistId) { document.getElementById('currentGistSection').style.display='block'; document.getElementById('currentGistId').value=state.gistId; }
+  openModal('settingsModal');
+}
+function openAddMember() { openModal('memberModal'); document.getElementById('memName').value=''; }
+
+function openAddEvent(dateStr) {
+  if (!state.members.length) { showToast('먼저 멤버를 추가하세요', 'error'); return; }
+  state.editingEventId = null;
+  document.getElementById('eventModalTitle').textContent='레슨 일정 추가';
+  document.getElementById('evDeleteBtn').style.display='none';
+  document.getElementById('evMember').innerHTML=state.members.map((m,i)=>`<option value="${i}">${m.name}</option>`).join('');
+  document.getElementById('evSong').value='';
+  document.getElementById('evDate').value=dateStr||'';
+  document.getElementById('evTime').value='14:00';
+  document.getElementById('evNote').value='';
+  openModal('eventModal');
+}
+
+function openEditEvent(ev) {
+  state.editingEventId=ev.id;
+  document.getElementById('eventModalTitle').textContent='일정 수정';
+  document.getElementById('evDeleteBtn').style.display='block';
+  document.getElementById('evMember').innerHTML=state.members.map((m,i)=>`<option value="${i}" ${i===ev.memberIdx?'selected':''}>${m.name}</option>`).join('');
+  document.getElementById('evSong').value=ev.song;
+  document.getElementById('evDate').value=ev.date;
+  document.getElementById('evTime').value=ev.time||'14:00';
+  document.getElementById('evNote').value=ev.note||'';
+  openModal('eventModal');
+}
+
+let rcSelectedDays = new Set();
+
+function openRecurringModal(dateStr) {
+  if (!state.members.length) { showToast('먼저 멤버를 추가하세요', 'error'); return; }
+  rcSelectedDays = new Set();
+  // Pre-select the day-of-week if a date is given
+  if (dateStr) {
+    const dow = new Date(dateStr+'T00:00:00').getDay();
+    rcSelectedDays.add(dow);
+  }
+  document.getElementById('rcMember').innerHTML=state.members.map((m,i)=>`<option value="${i}">${m.name}</option>`).join('');
+  document.getElementById('rcSong').value='';
+  document.getElementById('rcTime').value='14:00';
+  document.getElementById('rcNote').value='';
+  const today = new Date(), end = new Date(today); end.setMonth(end.getMonth()+3);
+  document.getElementById('rcStart').value = dateStr || fmtDate(today);
+  document.getElementById('rcEnd').value = fmtDate(end);
+  document.getElementById('rcDays').innerHTML = DAY_NAMES.map((name,i) => {
+    const cls = (i===0?' sun':i===6?' sat':'') + (rcSelectedDays.has(i)?' active':'');
+    return `<button type="button" class="dow-btn${cls}" data-dow="${i}" onclick="toggleDow(this,${i})">${name}</button>`;
+  }).join('');
+  updateRecurringPreview();
+  openModal('recurringModal');
+}
+
+function toggleDow(btn, dow) {
+  if (rcSelectedDays.has(dow)){rcSelectedDays.delete(dow);btn.classList.remove('active');}
+  else{rcSelectedDays.add(dow);btn.classList.add('active');}
+  updateRecurringPreview();
+}
+
+function updateRecurringPreview() {
+  const p=document.getElementById('rcPreview'), pt=document.getElementById('rcPreviewText');
+  const s=document.getElementById('rcStart').value, e=document.getElementById('rcEnd').value;
+  if (!rcSelectedDays.size||!s||!e) { p.style.display='none'; return; }
+  const count=countRecurringDates(s,e,[...rcSelectedDays]);
+  const labels=[...rcSelectedDays].sort().map(d=>DAY_NAMES[d]).join(', ');
+  const time=document.getElementById('rcTime').value||'미정';
+  pt.innerHTML=`매주 <strong>${labels}</strong> ${time} — 총 <strong>${count}회</strong> (${s} ~ ${e})`;
+  p.style.display='block';
+}
+
+// ── Data Ops ──
+function saveMember() {
+  const name=document.getElementById('memName').value.trim();
+  if(!name) return;
+  state.members.push({name}); closeModal('memberModal'); saveAndSync(); render();
+}
+
+function saveEvent() {
+  const mi=parseInt(document.getElementById('evMember').value);
+  const song=document.getElementById('evSong').value.trim();
+  const date=document.getElementById('evDate').value;
+  const time=document.getElementById('evTime').value;
+  const note=document.getElementById('evNote').value.trim();
+  if (isNaN(mi)||!song||!date) { showToast('필수 항목을 입력하세요','error'); return; }
+  if (state.editingEventId) { const ev=state.events.find(e=>e.id===state.editingEventId); if(ev) Object.assign(ev,{memberIdx:mi,song,date,time,note}); }
+  else { state.events.push({id:uid(),memberIdx:mi,song,date,time,note}); }
+  closeModal('eventModal'); saveAndSync(); render();
+  if (state.selectedDate) showDayDetail(state.selectedDate);
+}
+
+function deleteEvent() {
+  if (!state.editingEventId) return;
+  state.events=state.events.filter(e=>e.id!==state.editingEventId);
+  closeModal('eventModal'); saveAndSync(); render();
+  if (state.selectedDate) showDayDetail(state.selectedDate);
+}
+
+function saveRecurring() {
+  const mi=parseInt(document.getElementById('rcMember').value);
+  const song=document.getElementById('rcSong').value.trim();
+  const time=document.getElementById('rcTime').value;
+  const sd=document.getElementById('rcStart').value, ed=document.getElementById('rcEnd').value;
+  const note=document.getElementById('rcNote').value.trim();
+  const days=[...rcSelectedDays].sort();
+  if (isNaN(mi)){showToast('멤버를 선택하세요','error');return;}
+  if (!song){showToast('응원곡을 입력하세요','error');return;}
+  if (!days.length){showToast('반복 요일을 선택하세요','error');return;}
+  if (!sd||!ed){showToast('시작일과 종료일을 입력하세요','error');return;}
+  if (sd>ed){showToast('종료일이 시작일보다 빠릅니다','error');return;}
+  state.recurring.push({id:uid(),memberIdx:mi,song,days,time,startDate:sd,endDate:ed,note});
+  const count=countRecurringDates(sd,ed,days);
+  closeModal('recurringModal'); saveAndSync(); render();
+  showToast(`반복 일정 생성! (${count}회)`, 'success');
+  if (state.selectedDate) showDayDetail(state.selectedDate);
+}
+
+function deleteRecurring(rcId) {
+  const rc=state.recurring.find(r=>r.id===rcId);
+  if (!rc) return;
+  if (!confirm(`"${rc.song}" 반복 일정을 삭제하시겠습니까?`)) return;
+  state.recurring=state.recurring.filter(r=>r.id!==rcId);
+  saveAndSync(); render();
+  if (state.selectedDate) showDayDetail(state.selectedDate);
+}
+
+function convertToSingle(rcId, dateStr) {
+  const rc=state.recurring.find(r=>r.id===rcId);
+  if (!rc) return;
+  const ev={id:uid(),memberIdx:rc.memberIdx,song:rc.song,date:dateStr,time:rc.time,note:rc.note||'',recurringOverride:rcId};
+  state.events.push(ev); saveAndSync(); openEditEvent(ev); render();
+}
+
+// ── Calendar Rendering ──
+function changeMonth(d) {
+  state.currentMonth+=d;
+  if(state.currentMonth>11){state.currentMonth=0;state.currentYear++;}
+  if(state.currentMonth<0){state.currentMonth=11;state.currentYear--;}
+  render();
+}
+function goToday() { state.currentYear=new Date().getFullYear(); state.currentMonth=new Date().getMonth(); render(); }
+
+function renderCalendar() {
+  const year=state.currentYear, month=state.currentMonth;
+  document.getElementById('calTitle').textContent=`${year}년 ${month+1}월`;
+  const firstDay=new Date(year,month,1).getDay();
+  const dim=new Date(year,month+1,0).getDate();
+  const dip=new Date(year,month,0).getDate();
+  const todayStr=fmtDate(new Date());
+
+  let html='';
+  DAY_NAMES.forEach(d=>html+=`<div class="cal-day-header">${d}</div>`);
+
+  // Previous month cells — WITH events
+  for (let i=firstDay-1; i>=0; i--) {
+    const d=dip-i;
+    const pm=month===0?12:month, py=month===0?year-1:year;
+    const ds=`${py}-${String(pm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const evHtml=renderCellEvents(ds);
+    html+=`<div class="cal-cell other-month${ds===state.selectedDate?' selected':''}" onclick="selectDate('${ds}')"><span class="cal-date">${d}</span>${evHtml}</div>`;
+  }
+
+  // Current month cells
+  for (let d=1; d<=dim; d++) {
+    const ds=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const evHtml=renderCellEvents(ds);
+    html+=`<div class="cal-cell${ds===todayStr?' today':''}${ds===state.selectedDate?' selected':''}" onclick="selectDate('${ds}')"><span class="cal-date">${d}</span>${evHtml}</div>`;
+  }
+
+  // Next month cells — WITH events
+  const total=firstDay+dim, rem=(7-(total%7))%7;
+  for (let d=1; d<=rem; d++) {
+    const nm=month===11?1:month+2, ny=month===11?year+1:year;
+    const ds=`${ny}-${String(nm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const evHtml=renderCellEvents(ds);
+    html+=`<div class="cal-cell other-month${ds===state.selectedDate?' selected':''}" onclick="selectDate('${ds}')"><span class="cal-date">${d}</span>${evHtml}</div>`;
+  }
+  document.getElementById('calGrid').innerHTML=html;
+}
+
+function renderMembers() {
+  const list=document.getElementById('memberList');
+  if (!state.members.length) { list.innerHTML='<div class="empty-state"><p>멤버를 추가하세요</p></div>'; return; }
+  list.innerHTML=state.members.map((m,i)=>{
+    const sc=state.events.filter(e=>e.memberIdx===i).length;
+    const rc=state.recurring.filter(r=>r.memberIdx===i).length;
+    return `<div class="member-chip${state.filterMember===i?' active':''}" onclick="toggleFilter(${i})">
+      <div class="member-dot" style="background:${DOTS[i%DOTS.length]}"></div>
+      <span class="member-name">${m.name}</span>
+      <span class="member-count">${sc}개${rc?' + 🔁'+rc:''}</span>
+      <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();removeMember(${i})" title="삭제">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function renderRecurringList() {
+  const c=document.getElementById('recurringList');
+  if (!state.recurring.length) { c.innerHTML='<div class="empty-state" style="padding:12px;"><p>반복 일정 없음</p></div>'; return; }
+  c.innerHTML='<div class="recurring-list">'+state.recurring.map(rc=>{
+    const m=state.members[rc.memberIdx], cls=COLORS[rc.memberIdx%COLORS.length];
+    const dl=rc.days.map(d=>DAY_NAMES[d]).join(', ');
+    return `<div class="recurring-card">
+      <div class="rc-header"><span class="rc-title"><span class="rc-badge ${cls}">${m?.name||'?'}</span> ${rc.song}</span>
+      <button class="btn btn-sm btn-danger" onclick="deleteRecurring('${rc.id}')">✕</button></div>
+      <div class="rc-meta">📅 매주 ${dl} · 🕐 ${rc.time||'미정'}<br>📆 ${rc.startDate} ~ ${rc.endDate}${rc.note?'<br>📝 '+rc.note:''}</div>
+    </div>`;
+  }).join('')+'</div>';
+}
+
+function toggleFilter(i) { state.filterMember=state.filterMember===i?null:i; render(); }
+
+function removeMember(i) {
+  if (!confirm(`${state.members[i].name} 삭제? 모든 일정도 삭제됩니다.`)) return;
+  state.members.splice(i,1);
+  state.events=state.events.filter(e=>e.memberIdx!==i);
+  state.events.forEach(e=>{if(e.memberIdx>i)e.memberIdx--;});
+  state.recurring=state.recurring.filter(r=>r.memberIdx!==i);
+  state.recurring.forEach(r=>{if(r.memberIdx>i)r.memberIdx--;});
+  if (state.filterMember===i) state.filterMember=null;
+  saveAndSync(); render();
+}
+
+function selectDate(ds) { state.selectedDate=ds; renderCalendar(); showDayDetail(ds); }
+
+function showDayDetail(ds) {
+  const p=ds.split('-'), dow=new Date(ds+'T00:00:00').getDay();
+  document.getElementById('dayDetailTitle').textContent=`📅 ${+p[1]}월 ${+p[2]}일 (${DAY_NAMES[dow]})`;
+  const events=getAllEventsForDate(ds), c=document.getElementById('dayDetail');
+
+  let html='';
+  if (!events.length) {
+    html='<div class="empty-state"><p>일정이 없습니다</p></div>';
+  } else {
+    html='<div class="day-events">';
+    events.forEach(ev=>{
+      const m=state.members[ev.memberIdx], cls=COLORS[ev.memberIdx%COLORS.length];
+      html+=`<div class="day-event-card${ev.isRecurring?' is-recurring':''}">
+        <div class="event-title"><span class="cal-event ${cls}" style="display:inline-block;margin-right:6px;">${m?.name||'?'}</span>${ev.song}${ev.isRecurring?'<span style="font-size:11px;color:var(--cyan);margin-left:4px;">🔁 반복</span>':''}</div>
+        <div class="event-meta"><span>🕐 ${ev.time||'미정'}</span>${ev.note?`<span>📝 ${ev.note}</span>`:''}</div>
+        <div class="event-actions">${ev.isRecurring
+          ?`<button class="btn btn-sm btn-secondary" onclick="convertToSingle('${ev.recurringId}','${ds}')">이 날만 수정</button>`
+          :`<button class="btn btn-sm btn-secondary" onclick="openEditEvent(state.events.find(e=>e.id==='${ev.id}'))">수정</button>`
+        }</div>
+      </div>`;
+    });
+    html+='</div>';
+  }
+
+  // Always show both add buttons at the bottom
+  html+=`<div class="add-btns">
+    <button class="btn btn-primary" onclick="openAddEvent('${ds}')">+ 일정 추가</button>
+    <button class="btn btn-green" onclick="openRecurringModal('${ds}')">🔁 반복 일정</button>
+  </div>`;
+  c.innerHTML=html;
+}
+
+function render() { renderCalendar(); renderMembers(); renderRecurringList(); }
+
+async function manualRefresh() {
+  if (!state.token||!state.gistId) { showToast('GitHub 연결이 필요합니다','error'); return; }
+  await pullFromRemote();
+  showToast('최신 데이터로 갱신 완료!', 'success');
+}
+
+// ── Init ──
+loadLocal();
+if (state.token && state.gistId) { updateStatus(true); syncData().then(()=>startAutoSync()); }
+render();
+
+['rcStart','rcEnd','rcTime'].forEach(id=>document.getElementById(id).addEventListener('change', updateRecurringPreview));
+</script>
+</body>
+</html>
