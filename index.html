@@ -618,7 +618,8 @@ async function syncData() {
     if (!state.gistId) { await createGist(); showToast('새 캘린더 생성 완료!', 'success'); }
     else {
       const remote = await loadGist();
-      if (remote) { state.members = remote.members||[]; state.events = remote.events||[]; state.recurring = remote.recurring||[]; }
+      // 새로고침 시 로컬 변경이 원격 때문에 사라지지 않도록 "병합"합니다.
+      if (remote) { mergeRemoteIntoLocal(remote); }
     }
     updateStatus(true); saveLocal(); render();
     if (state.selectedDate) showDayDetail(state.selectedDate);
