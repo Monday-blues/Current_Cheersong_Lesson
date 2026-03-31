@@ -292,11 +292,23 @@ function renderCellEvents(ds){
 const GIST_FILENAME='lesson-calendar-data.json';
 
 async function gistRequest(method,path,body){
-  const res=await fetch(`https://api.github.com${path}`,{
-    method,headers:{'Authorization':`token ${state.token}`,'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'},
-    body:body?JSON.stringify(body):undefined,
-  });
-  if(!res.ok) throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
+  let res;
+  try {
+    res=await fetch(`https://api.github.com${path}`,{
+      method,headers:{'Authorization':`token ${state.token}`,'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'},
+      body:body?JSON.stringify(body):undefined,
+    });
+  } catch(networkErr) {
+    throw new Error(`네트워크 오류: ${networkErr.message}`);
+  }
+  if(!res.ok){
+    let detail='';
+    try{const errBody=await res.json();detail=errBody.message||JSON.stringify(errBody);}catch(e){detail=res.statusText;}
+    if(res.status===401) throw new Error('인증 실패(401): 토큰이 잘못되었거나 만료되었습니다');
+    if(res.status===403) throw new Error('권한 없음(403): 토큰에 gist 권한이 있는지 확인하세요' + (detail.includes('rate limit')?' — API 호출 한도 초과':''));
+    if(res.status===404) throw new Error('찾을 수 없음(404): Gist ID가 올바른지 확인하세요');
+    throw new Error(`GitHub API ${res.status}: ${detail}`);
+  }
   return res.json();
 }
 
@@ -337,10 +349,10 @@ async function syncData(){
     updateStatus(true);saveLocal();render();
     if(state.selectedDate)showDayDetail(state.selectedDate);
     setSyncUI('done');
-  }catch(e){console.error(e);setSyncUI('error');updateStatus(false);}
+  }catch(e){console.error(e);setSyncUI('error');updateStatus(false);showToast('연결 실패: '+e.message,'error');}
 }
 
-async function pushToRemote(){if(!state.token||!state.gistId)return;setSyncUI('syncing');try{await updateGist();setSyncUI('done');}catch(e){console.error(e);setSyncUI('error');}}
+async function pushToRemote(){if(!state.token||!state.gistId)return;setSyncUI('syncing');try{await updateGist();setSyncUI('done');}catch(e){console.error(e);setSyncUI('error');showToast('저장 실패: '+e.message,'error');}}
 
 async function pullFromRemote(){
   if(!state.token||!state.gistId)return;setSyncUI('syncing');
@@ -351,7 +363,7 @@ async function pullFromRemote(){
       if(changed){state.members=remote.members||[];state.events=remote.events||[];state.recurring=remote.recurring||[];saveLocal();render();if(state.selectedDate)showDayDetail(state.selectedDate);showToast('새 변경사항 동기화됨','success');}
     }
     setSyncUI('done');
-  }catch(e){console.error(e);setSyncUI('error');}
+  }catch(e){console.error(e);setSyncUI('error');showToast('동기화 실패: '+e.message,'error');}
 }
 
 async function saveAndSync(){saveLocal();await pushToRemote();}
@@ -380,17 +392,41 @@ function loadLocal(){try{state.members=JSON.parse(localStorage.getItem('cal_memb
 async function connectGithub(){
   const token=document.getElementById('ghToken').value.trim();
   if(!token){showToast('토큰을 입력하세요','error');return;}
+  
+  // 1) 먼저 토큰 유효성 검증
+  showToast('토큰 확인 중...','');
+  try {
+    const testRes = await fetch('https://api.github.com/user', {
+      headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+    });
+    if(!testRes.ok) {
+      if(testRes.status===401) { showToast('토큰이 유효하지 않습니다. 다시 확인해주세요','error'); return; }
+      if(testRes.status===403) { showToast('토큰 권한이 부족합니다. gist 권한을 확인하세요','error'); return; }
+      showToast(`토큰 확인 실패 (${testRes.status})`,'error'); return;
+    }
+    const user = await testRes.json();
+    showToast(`✅ ${user.login} 계정 확인 완료`,'success');
+  } catch(networkErr) {
+    showToast('GitHub 서버에 연결할 수 없습니다. 인터넷 연결을 확인하세요','error');
+    return;
+  }
+
+  // 2) 토큰 저장 후 동기화
   state.token=token;localStorage.setItem('gh_token',token);
-  // Gist ID는 하드코딩 값 또는 localStorage에서 자동 적용
-  await syncData();startAutoSync();
-  closeModal('settingsModal');
-  showToast('연결 완료! 자동 동기화 활성화','success');
+  try {
+    await syncData();
+    startAutoSync();
+    closeModal('settingsModal');
+    showToast('연결 완료! 자동 동기화 활성화','success');
+  } catch(e) {
+    showToast('연결 실패: '+e.message,'error');
+  }
 }
 
 function updateStatus(c){
   const dot=document.getElementById('statusDot'),text=document.getElementById('statusText');
   if(c){dot.classList.add('connected');text.textContent=`GitHub 연결됨`;}
-  else{dot.classList.remove('connected');text.textContent=state.token?'연결 오류':'GitHub 연결 안됨 — 설정에서 토큰을 입력하세요';}
+  else{dot.classList.remove('connected');text.textContent=state.token?'연결 오류 — F12 콘솔에서 상세 내용을 확인하세요':'GitHub 연결 안됨 — 설정에서 토큰을 입력하세요';}
 }
 
 function showToast(msg,type=''){const t=document.createElement('div');t.className=`toast ${type}`;t.textContent=msg;document.getElementById('toastContainer').appendChild(t);setTimeout(()=>t.remove(),3000);}
